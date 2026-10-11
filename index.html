@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Recipes">
+<meta name="theme-color" content="#b8441f">
+<title>Recipe Box</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root{--bg:#faf6f1;--surface:#fff;--ink:#2a211b;--muted:#7a6c62;--line:#eadfd4;--accent:#b8441f;--soft:#f6e7dc;--ok:#3f7d4e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171310;--surface:#231d19;--ink:#f3ebe3;--muted:#a8998d;--line:#3a302a;--accent:#d8673f;--soft:#3a2a22;--ok:#7cc08c}}
+:root[data-theme="dark"]{--bg:#171310;--surface:#231d19;--ink:#f3ebe3;--muted:#a8998d;--line:#3a302a;--accent:#d8673f;--soft:#3a2a22;--ok:#7cc08c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font:inherit;color:inherit}
+.view{display:none}.view.on{display:block}
+.bar{position:sticky;top:0;z-index:5;background:var(--accent);color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 12px}
+.bar-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px}
+.bar h1{font-size:22px;margin:0;font-weight:700}
+.bar .link{background:none;border:0;color:#fff;font-weight:600;padding:6px 0;font-size:17px}
+.search{width:100%;margin-top:10px;border:0;border-radius:10px;padding:10px 12px;background:rgba(255,255,255,.95);color:#2a211b;font-size:16px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:14px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.sortrow{display:flex;justify-content:space-between;align-items:center;padding:6px 16px;color:var(--muted);font-size:14px}
+.sortrow select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 8px;font-size:14px}
+.list{padding:4px 16px 16px;display:grid;gap:10px}
+.card{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px}
+.thumb{width:64px;height:64px;border-radius:10px;object-fit:cover;flex:none;background:var(--soft);display:grid;place-items:center;font-size:28px}
+.card h3{margin:0 0 2px;font-size:16px;line-height:1.25}
+.card p{margin:0;color:var(--muted);font-size:13px}
+.empty{text-align:center;color:var(--muted);padding:40px 24px}
+.fab{position:fixed;right:18px;bottom:calc(88px + env(safe-area-inset-bottom));width:58px;height:58px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:32px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:6}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:7}
+.tabbar button{flex:1;border:0;background:none;padding:10px 4px 8px;font-size:12px;color:var(--muted)}
+.tabbar button span{display:block;font-size:22px}
+.tabbar button.on{color:var(--accent);font-weight:600}
+.page{padding:14px 16px 24px}
+.hero{width:100%;max-height:300px;object-fit:cover;border-radius:14px;display:block}
+.page h1{font-size:24px;margin:12px 0 4px;line-height:1.2}
+.page h2{font-size:17px;margin:22px 0 8px;color:var(--accent)}
+.meta{color:var(--muted);margin:0 0 8px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.tag{background:var(--soft);border-radius:999px;padding:2px 10px;font-size:13px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;font-size:15px;text-decoration:none;color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:#c0392b}
+.btn.wide{width:100%;margin-top:10px}
+.toggle{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px}
+ul.ing{list-style:none;padding:0;margin:0}
+ul.ing li{border-bottom:1px solid var(--line);padding:8px 0}
+ul.ing label{display:flex;gap:10px;align-items:flex-start}
+ul.ing input{width:20px;height:20px;margin-top:2px;accent-color:var(--accent)}
+ul.ing input:checked+span{text-decoration:line-through;color:var(--muted)}
+ol.steps{padding-left:22px;margin:0}
+ol.steps li{padding:6px 0 10px}
+ol.steps li.done{color:var(--muted);text-decoration:line-through}
+.notes{white-space:pre-wrap}
+.videos{display:grid;gap:10px}
+.videos video{width:100%;border-radius:12px;background:#000;max-height:70vh}
+.muted{color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.field{margin:0 0 14px}
+.field label{display:block;font-size:14px;font-weight:600;margin-bottom:5px}
+.field small{display:block;color:var(--muted);font-size:13px;margin-top:4px}
+.in{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-size:16px}
+textarea.in{min-height:110px;resize:vertical}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.box{background:var(--soft);border-radius:14px;padding:12px;margin-bottom:16px}
+.mediarow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.preview{width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:6px}
+.match{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px;width:100%;text-align:left}
+.match h3{margin:0 0 4px;font-size:16px}
+.bar-meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:6px 0}
+.bar-meter i{display:block;height:100%;background:var(--ok)}
+.toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2a211b;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+.hide-tabs .tabbar,.hide-tabs .fab{display:none}
+</style>
+</head>
+<body>
+
+<!-- ===== RECIPE LIST ===== -->
+<section class="view on" id="v-list">
+  <div class="bar">
+    <div class="bar-row"><h1>Recipe Box</h1><span id="count" style="opacity:.85;font-size:14px"></span></div>
+    <input class="search" id="q" type="search" placeholder="Search name, ingredient, tag…" autocomplete="off">
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="sortrow">
+    <span id="shown"></span>
+    <select id="sort" aria-label="Sort">
+      <option value="new">Newest first</option>
+      <option value="az">A–Z</option>
+      <option value="quick">Quickest</option>
+      <option value="cooked">Most cooked</option>
+      <option value="recent">Recently cooked</option>
+    </select>
+  </div>
+  <div class="list" id="list"></div>
+</section>
+
+<!-- ===== RECIPE DETAIL ===== -->
+<section class="view" id="v-detail">
+  <div class="bar"><div class="bar-row">
+    <button class="link" id="d-back">‹ Recipes</button>
+    <button class="link" id="d-edit">Edit</button>
+  </div></div>
+  <div class="page" id="detail-body"></div>
+</section>
+
+<!-- ===== ADD / EDIT ===== -->
+<section class="view" id="v-edit">
+  <div class="bar"><div class="bar-row">
+    <button class="link" id="e-cancel">Cancel</button>
+    <h1 id="e-heading" style="font-size:17px">New recipe</h1>
+    <button class="link" id="e-save">Save</button>
+  </div></div>
+  <div class="page">
+    <div class="box">
+      <div class="field">
+        <label for="f-url">Link from Instagram / Facebook</label>
+        <div class="row" style="gap:8px">
+          <input class="in" id="f-url" type="url" inputmode="url" placeholder="https://www.instagram.com/reel/…" style="flex:3">
+          <button class="btn" id="f-paste" type="button" style="flex:1">Paste</button>
+        </div>
+        <small>In the app: Share → Copy link, then tap Paste.</small>
+      </div>
+      <div class="field" style="margin:0">
+        <label for="f-caption">Paste the post caption (optional)</label>
+        <textarea class="in" id="f-caption" placeholder="Paste the recipe text here and tap Fill in for me"></textarea>
+        <button class="btn wide" id="f-parse" type="button">✨ Fill in for me</button>
+      </div>
+    </div>
+
+    <div class="field"><label for="f-title">Recipe name</label><input class="in" id="f-title" placeholder="e.g. Crispy chilli beef"></div>
+    <div class="row">
+      <div class="field"><label for="f-cat">Category</label><select class="in" id="f-cat"></select></div>
+      <div class="field"><label for="f-cuisine">Cuisine</label><input class="in" id="f-cuisine" placeholder="e.g. Thai"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label for="f-time">Time (mins)</label><input class="in" id="f-time" type="number" inputmode="numeric" min="0"></div>
+      <div class="field"><label for="f-serves">Serves</label><input class="in" id="f-serves" inputmode="numeric"></div>
+    </div>
+    <div class="field"><label for="f-tags">Tags</label><input class="in" id="f-tags" placeholder="quick, veggie, air fryer"><small>Separate with commas.</small></div>
+    <div class="field"><label for="f-ing">Ingredients</label><textarea class="in" id="f-ing" placeholder="One per line"></textarea></div>
+    <div class="field"><label for="f-steps">Method</label><textarea class="in" id="f-steps" placeholder="One step per line" style="min-height:150px"></textarea></div>
+    <div class="field"><label for="f-notes">Notes</label><textarea class="in" id="f-notes" placeholder="Tweaks, what worked, what to change next time"></textarea></div>
+    <div class="field"><label class="toggle" style="font-weight:600;color:var(--ink)"><input type="checkbox" id="f-fav"> ★ Favourite</label></div>
+
+    <div class="field">
+      <label>Photo</label>
+      <div id="e-photo"></div>
+      <label class="btn">📷 Take or choose a photo<input class="sr" type="file" accept="image/*" id="f-photo"></label>
+    </div>
+    <div class="field">
+      <label>Videos</label>
+      <div id="e-videos"></div>
+      <label class="btn">🎥 Record or add videos<input class="sr" type="file" accept="video/*" multiple id="f-videos"></label>
+      <small>Record yourself cooking it, or add a clip you've saved to Photos.</small>
+    </div>
+    <button class="btn primary wide" id="e-save2" type="button">Save recipe</button>
+    <button class="btn danger wide" id="e-delete" type="button">Delete recipe</button>
+  </div>
+</section>
+
+<!-- ===== WHAT CAN I COOK ===== -->
+<section class="view" id="v-cook">
+  <div class="bar"><div class="bar-row"><h1>What can I cook?</h1></div></div>
+  <div class="page">
+    <div class="field">
+      <label for="have">What have you got?</label>
+      <textarea class="in" id="have" placeholder="chicken, rice, peppers, soy sauce" style="min-height:80px"></textarea>
+      <small>Separate with commas. Recipes are ranked by how much you already have.</small>
+    </div>
+    <label class="toggle" style="margin-bottom:14px"><input type="checkbox" id="basics" checked> Assume I have salt, pepper, oil and water</label>
+    <div id="cook-out"></div>
+  </div>
+</section>
+
+<!-- ===== BACKUP ===== -->
+<section class="view" id="v-backup">
+  <div class="bar"><div class="bar-row"><h1>Backup</h1></div></div>
+  <div class="page">
+    <p>Your recipes are stored only on this phone. Export a backup now and then and keep it in Files or iCloud Drive.</p>
+    <p class="muted" style="font-size:14px">Backups include recipes and photos. Videos stay on the phone because they're too large.</p>
+    <button class="btn primary wide" id="b-export">⬆︎ Export backup</button>
+    <label class="btn wide">⬇︎ Import a backup<input class="sr" type="file" accept=".json,application/json" id="b-import"></label>
+    <p class="muted" id="b-usage" style="font-size:14px;margin-top:18px"></p>
+  </div>
+</section>
+
+<button class="fab" id="fab" aria-label="Add recipe">+</button>
+<nav class="tabbar">
+  <button class="on" data-tab="list"><span>📖</span>Recipes</button>
+  <button data-tab="cook"><span>🧺</span>What can I cook?</button>
+  <button data-tab="backup"><span>💾</span>Backup</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Database (IndexedDB, stays on the phone) ---------- */
+const DB_NAME = 'recipe-box', DB_VER = 1;
+let db;
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains('recipes')) d.createObjectStore('recipes', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('media')) d.createObjectStore('media', { keyPath: 'id' });
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function tx(store, mode, fn) {
+  return new Promise((res, rej) => {
+    const t = db.transaction(store, mode);
+    const out = fn(t.objectStore(store));
+    t.oncomplete = () => res(out instanceof IDBRequest ? out.result : out);
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error);
+  });
+}
+const getAllRecipes = () => tx('recipes', 'readonly', s => s.getAll());
+const putRecipe = r => tx('recipes', 'readwrite', s => s.put(r));
+const delRecipe = id => tx('recipes', 'readwrite', s => s.delete(id));
+const putMedia = m => tx('media', 'readwrite', s => s.put(m));
+const getMedia = id => tx('media', 'readonly', s => s.get(id));
+const delMedia = id => tx('media', 'readwrite', s => s.delete(id));
+
+/* ---------- Helpers ---------- */
+const CATS = ['Breakfast','Lunch','Dinner','Side','Soup','Salad','Dessert','Baking','Snack','Drink','Other'];
+const STAPLES = ['salt','pepper','oil','water'];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const toLines = s => String(s || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const mb = n => (n / 1048576).toFixed(1) + ' MB';
+
+function detectSource(u) {
+  u = (u || '').toLowerCase();
+  if (u.includes('instagram.')) return 'instagram';
+  if (u.includes('facebook.') || u.includes('fb.watch') || u.includes('fb.com')) return 'facebook';
+  if (u.includes('tiktok.')) return 'tiktok';
+  if (u.includes('youtu')) return 'youtube';
+  return u ? 'web' : '';
+}
+const SRC = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', web: 'website' };
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '';
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+function resizeImage(file, max = 900) {
+  return new Promise((res, rej) => {
+    const img = new Image(), u = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Could not read that image')); };
+    img.src = u;
+  });
+}
+
+/* ---------- State & navigation ---------- */
+let recipes = [], current = null, draft = null, pendingVideos = [], removedVideoIds = [];
+let filter = { q: '', cat: 'All', sort: 'new' }, objectUrls = [], wakeLock = null;
+
+function releaseUrls() { objectUrls.forEach(u => URL.revokeObjectURL(u)); objectUrls = []; }
+async function releaseWake() { try { if (wakeLock) await wakeLock.release(); } catch (e) {} wakeLock = null; }
+
+function show(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + name));
+  document.body.classList.toggle('hide-tabs', name === 'detail' || name === 'edit');
+  $('#fab').style.display = name === 'list' ? '' : 'none';
+  document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  if (name !== 'detail') { releaseUrls(); releaseWake(); }
+  window.scrollTo(0, 0);
+  if (name === 'list') renderList();
+  if (name === 'cook') renderCook();
+  if (name === 'backup') renderUsage();
+}
+
+/* ---------- List view ---------- */
+function renderList() {
+  const words = filter.q.toLowerCase().split(/\s+/).filter(Boolean);
+  const list = recipes.filter(r => {
+    if (filter.cat === '★' && !r.fav) return false;
+    if (filter.cat !== 'All' && filter.cat !== '★' && r.category !== filter.cat) return false;
+    if (!words.length) return true;
+    const hay = [r.title, r.cuisine, r.notes, r.category, SRC[r.source], ...(r.tags || []), ...(r.ingredients || [])].join(' ').toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+  const by = {
+    new: (a, b) => b.created - a.created,
+    az: (a, b) => a.title.localeCompare(b.title),
+    quick: (a, b) => (+a.time || 1e9) - (+b.time || 1e9),
+    cooked: (a, b) => (b.cooked || 0) - (a.cooked || 0),
+    recent: (a, b) => (b.lastCooked || 0) - (a.lastCooked || 0)
+  };
+  list.sort(by[filter.sort]);
+
+  const used = CATS.filter(c => recipes.some(r => r.category === c));
+  $('#chips').innerHTML = ['All', '★', ...used].map(c =>
+    `<button class="chip ${filter.cat === c ? 'on' : ''}" data-cat="${esc(c)}">${c === '★' ? '★ Favourites' : esc(c)}</button>`).join('');
+
+  $('#count').textContent = recipes.length ? `${recipes.length} saved` : '';
+  $('#shown').textContent = recipes.length ? `${list.length} shown` : '';
+
+  if (!recipes.length) {
+    $('#list').innerHTML = `<div class="empty"><div style="font-size:48px">🍲</div><p><b>No recipes yet.</b></p><p>Spot one on Instagram or Facebook, copy the link, then tap <b>+</b>.</p></div>`;
+    return;
+  }
+  if (!list.length) { $('#list').innerHTML = `<div class="empty">Nothing matches that search.</div>`; return; }
+
+  $('#list').innerHTML = list.map(r => {
+    const meta = [r.category, r.time ? r.time + ' min' : '', SRC[r.source] ? 'from ' + SRC[r.source] : ''].filter(Boolean).join(' · ');
+    const extra = [r.videos?.length ? `🎬 ${r.videos.length}` : '', r.cooked ? `✓ cooked ${r.cooked}×` : ''].filter(Boolean).join('  ');
+    return `<button class="card" data-id="${r.id}">
+      ${r.photo ? `<img class="thumb" src="${r.photo}" alt="">` : `<div class="thumb">🍲</div>`}
+      <div><h3>${r.fav ? '★ ' : ''}${esc(r.title)}</h3><p>${esc(meta)}</p>${extra ? `<p>${extra}</p>` : ''}</div>
+    </button>`;
+  }).join('');
+}
+
+/* ---------- Detail view ---------- */
+function openDetail(id) {
+  const r = recipes.find(x => x.id === id);
+  if (!r) return show('list');
+  current = r;
+  const meta = [r.category, r.cuisine, r.time ? r.time + ' min' : '', r.servings ? 'Serves ' + r.servings : ''].filter(Boolean).map(esc).join(' · ');
+  const src = safeUrl(r.sourceUrl);
+  $('#detail-body').innerHTML = `
+    ${r.photo ? `<img class="hero" src="${r.photo}" alt="">` : ''}
+    <h1>${esc(r.title)}</h1>
+    <p class="meta">${meta}</p>
+    ${r.tags?.length ? `<div class="tags">${r.tags.map(t => `<span class="tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+    <div class="actions">
+      <button class="btn" id="d-fav">${r.fav ? '★ Favourite' : '☆ Favourite'}</button>
+      <button class="btn" id="d-cooked">✓ I cooked this${r.cooked ? ` (${r.cooked})` : ''}</button>
+      ${src ? `<a class="btn" href="${esc(src)}" target="_blank" rel="noopener">Open on ${SRC[r.source] || 'website'}</a>` : ''}
+    </div>
+    ${'wakeLock' in navigator ? `<label class="toggle"><input type="checkbox" id="d-wake"> Keep screen on while cooking</label>` : ''}
+    ${r.ingredients?.length ? `<h2>Ingredients</h2><ul class="ing">${r.ingredients.map(i => `<li><label><input type="checkbox"><span>${esc(i)}</span></label></li>`).join('')}</ul>` : ''}
+    ${r.steps?.length ? `<h2>Method</h2><ol class="steps">${r.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}
+    <h2>Videos</h2>
+    <div class="videos" id="d-videos"></div>
+    <label class="btn wide">🎥 Record or add a video<input class="sr" type="file" accept="video/*" id="d-addvid"></label>
+    ${r.notes ? `<h2>Notes</h2><p class="notes">${esc(r.notes)}</p>` : ''}
+  `;
+  show('detail');
+  renderVideos(r);
+
+  $('#d-fav').onclick = async () => { r.fav = !r.fav; await putRecipe(r); openDetail(r.id); };
+  $('#d-cooked').onclick = async () => {
+    r.cooked = (r.cooked || 0) + 1; r.lastCooked = Date.now(); await putRecipe(r);
+    $('#d-cooked').textContent = `✓ I cooked this (${r.cooked})`; toast('Nice one! Logged.');
+  };
+  const w = $('#d-wake');
+  if (w) w.onchange = async () => {
+    if (w.checked) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { w.checked = false; toast('Couldn’t keep the screen on'); } }
+    else releaseWake();
+  };
+  document.querySelectorAll('#detail-body ol.steps li').forEach(li => li.onclick = () => li.classList.toggle('done'));
+  $('#d-addvid').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    toast('Saving video…');
+    try {
+      const id = uid();
+      await putMedia({ id, type: f.type || 'video/mp4', name: f.name, data: await f.arrayBuffer() });
+      r.videos = r.videos || []; r.videos.push({ id, name: f.name, size: f.size });
+      r.updated = Date.now(); await putRecipe(r);
+      releaseUrls(); renderVideos(r); toast('Video added');
+    } catch (err) { toast('Not enough space to save that video'); }
+    e.target.value = '';
+  };
+}
+
+async function renderVideos(r) {
+  const box = $('#d-videos'); if (!box) return;
+  if (!r.videos?.length) { box.innerHTML = `<p class="muted">No videos yet. Record yourself making it, or add a clip from Photos.</p>`; return; }
+  box.innerHTML = '';
+  for (const v of r.videos) {
+    const m = await getMedia(v.id);
+    const div = document.createElement('div');
+    if (!m) div.innerHTML = `<p class="muted">“${esc(v.name || 'Video')}” isn’t stored on this phone.</p>`;
+    else {
+      const url = URL.createObjectURL(new Blob([m.data], { type: m.type }));
+      objectUrls.push(url);
+      div.innerHTML = `<video controls playsinline preload="metadata" src="${url}#t=0.1"></video>`;
+    }
+    box.appendChild(div);
+  }
+}
+
+/* ---------- Add / edit ---------- */
+$('#f-cat').innerHTML = CATS.map(c => `<option>${c}</option>`).join('');
+
+function openEdit(r) {
+  draft = r ? JSON.parse(JSON.stringify(r)) : {
+    id: uid(), title: '', sourceUrl: '', source: '', category: 'Dinner', cuisine: '', tags: [], time: '', servings: '',
+    ingredients: [], steps: [], notes: '', photo: '', videos: [], fav: false, cooked: 0, lastCooked: 0, created: Date.now()
+  };
+  pendingVideos = []; removedVideoIds = [];
+  $('#e-heading').textContent = r ? 'Edit recipe' : 'New recipe';
+  $('#f-url').value = draft.sourceUrl; $('#f-caption').value = '';
+  $('#f-title').value = draft.title; $('#f-cat').value = draft.category || 'Other';
+  $('#f-cuisine').value = draft.cuisine; $('#f-time').value = draft.time; $('#f-serves').value = draft.servings;
+  $('#f-tags').value = (draft.tags || []).join(', ');
+  $('#f-ing').value = (draft.ingredients || []).join('\n');
+  $('#f-steps').value = (draft.steps || []).join('\n');
+  $('#f-notes').value = draft.notes; $('#f-fav').checked = !!draft.fav;
+  $('#e-delete').style.display = r ? '' : 'none';
+  renderEditMedia();
+  show('edit');
+}
+
+function renderEditMedia() {
+  $('#e-photo').innerHTML = draft.photo
+    ? `<img class="preview" src="${draft.photo}" alt=""><button class="btn danger" type="button" id="rm-photo">Remove photo</button><br><br>` : '';
+  const rm = $('#rm-photo'); if (rm) rm.onclick = () => { draft.photo = ''; renderEditMedia(); };
+  const rows = [
+    ...draft.videos.map(v => `<div class="mediarow"><span>🎬 ${esc(v.name || 'Video')}${v.size ? ' · ' + mb(v.size) : ''}</span><button class="btn danger" type="button" data-rmv="${v.id}">Remove</button></div>`),
+    ...pendingVideos.map(p => `<div class="mediarow"><span>🎬 ${esc(p.file.name)} · ${mb(p.file.size)} <i class="muted">(new)</i></span><button class="btn danger" type="button" data-rmp="${p.id}">Remove</button></div>`)
+  ];
+  $('#e-videos').innerHTML = rows.join('');
+}
+
+$('#e-videos').addEventListener('click', e => {
+  const a = e.target.dataset.rmv, b = e.target.dataset.rmp;
+  if (a) { removedVideoIds.push(a); draft.videos = draft.videos.filter(v => v.id !== a); }
+  if (b) pendingVideos = pendingVideos.filter(p => p.id !== b);
+  if (a || b) renderEditMedia();
+});
+
+$('#f-photo').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { draft.photo = await resizeImage(f); renderEditMedia(); } catch (err) { toast(err.message); }
+  e.target.value = '';
+};
+$('#f-videos').onchange = e => {
+  for (const f of e.target.files) pendingVideos.push({ id: uid(), file: f });
+  renderEditMedia(); e.target.value = '';
+};
+
+$('#f-paste').onclick = async () => {
+  try {
+    const t = (await navigator.clipboard.readText()).trim();
+    if (!t) return toast('Clipboard is empty');
+    const m = t.match(/https?:\/\/\S+/);
+    if (m && !$('#f-url').value) $('#f-url').value = m[0];
+    if (t.length - (m ? m[0].length : 0) > 40) $('#f-caption').value = t;
+    toast('Pasted');
+  } catch (e) { toast('Long-press the box and choose Paste instead'); }
+};
+
+/* Smart paste: splits a caption into ingredients and steps */
+function parseCaption(text) {
+  const lines = toLines(text);
+  let mode = null; const ing = [], steps = [], other = [];
+  for (const raw of lines) {
+    const l = raw.replace(/^[\-–•*·▪▫◦►▶➡✅✔☑🔸🔹👉🥄🍴\uFE0F\s]+/u, '').trim();
+    if (!l) continue;
+    const low = l.toLowerCase().replace(/[:：\s]+$/, '');
+    if (l.length < 40 && /^(ingredients?|you('|’)?ll need|you will need|what you need|shopping list)\b/.test(low)) { mode = 'i'; continue; }
+    if (l.length < 40 && /^(method|instructions?|directions?|steps?|how to (make|cook)( it)?|preparation|recipe)\b/.test(low)) { mode = 's'; continue; }
+    if (/^#\w/.test(l)) continue; // hashtag lines
+    if (mode === 'i') ing.push(l);
+    else if (mode === 's') steps.push(l.replace(/^(step\s*)?\d+\s*[\.\):\-]\s*/i, ''));
+    else other.push(l);
+  }
+  if (!ing.length && !steps.length) {
+    for (const l of other) {
+      if (/^(\d|½|¼|¾|⅓|a |an |pinch|handful|splash|knob)/i.test(l) && l.length < 70 && !/^\d+\s*[\.\)]/.test(l)) ing.push(l);
+      else if (/^\d+\s*[\.\)]/.test(l)) steps.push(l.replace(/^\d+\s*[\.\)]\s*/, ''));
+    }
+  }
+  return { title: (other[0] || '').replace(/[#@].*$/, '').slice(0, 80).trim(), ing, steps };
+}
+$('#f-parse').onclick = () => {
+  const t = $('#f-caption').value.trim();
+  if (!t) return toast('Paste the caption first');
+  const p = parseCaption(t);
+  if (p.title && !$('#f-title').value) $('#f-title').value = p.title;
+  if (p.ing.length) $('#f-ing').value = p.ing.join('\n');
+  if (p.steps.length) $('#f-steps').value = p.steps.join('\n');
+  if (!$('#f-notes').value) $('#f-notes').value = t;
+  toast(p.ing.length || p.steps.length ? `Found ${p.ing.length} ingredients, ${p.steps.length} steps — check them over` : 'Couldn’t spot sections; caption saved in Notes');
+};
+
+async function saveDraft() {
+  const title = $('#f-title').value.trim();
+  if (!title) { toast('Give the recipe a name'); $('#f-title').focus(); return; }
+  let url = $('#f-url').value.trim();
+  if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  Object.assign(draft, {
+    title, sourceUrl: url, source: detectSource(url),
+    category: $('#f-cat').value, cuisine: $('#f-cuisine').value.trim(),
+    time: $('#f-time').value ? +$('#f-time').value : '', servings: $('#f-serves').value.trim(),
+    tags: $('#f-tags').value.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean),
+    ingredients: toLines($('#f-ing').value), steps: toLines($('#f-steps').value),
+    notes: $('#f-notes').value.trim(), fav: $('#f-fav').checked, updated: Date.now()
+  });
+  const btns = [$('#e-save'), $('#e-save2')]; btns.forEach(b => b.disabled = true);
+  if (pendingVideos.length) toast('Saving videos…');
+  try {
+    for (const p of pendingVideos) {
+      await putMedia({ id: p.id, type: p.file.type || 'video/mp4', name: p.file.name, data: await p.file.arrayBuffer() });
+      draft.videos.push({ id: p.id, name: p.file.name, size: p.file.size });
+    }
+    for (const id of removedVideoIds) await delMedia(id);
+    await putRecipe(draft);
+    const i = recipes.findIndex(r => r.id === draft.id);
+    if (i >= 0) recipes[i] = draft; else recipes.push(draft);
+    if (navigator.storage?.persist) navigator.storage.persist();
+    openDetail(draft.id); toast('Saved');
+  } catch (e) { toast('Couldn’t save — phone may be low on space'); }
+  btns.forEach(b => b.disabled = false);
+}
+$('#e-save').onclick = saveDraft;
+$('#e-save2').onclick = saveDraft;
+$('#e-cancel').onclick = () => (recipes.some(r => r.id === draft.id) ? openDetail(draft.id) : show('list'));
+$('#e-delete').onclick = async () => {
+  if (!confirm(`Delete “${draft.title}” and its videos?`)) return;
+  const r = recipes.find(x => x.id === draft.id);
+  for (const v of (r?.videos || [])) await delMedia(v.id);
+  await delRecipe(draft.id);
+  recipes = recipes.filter(x => x.id !== draft.id);
+  show('list'); toast('Deleted');
+};
+
+/* ---------- What can I cook? ---------- */
+function renderCook() {
+  const have = $('#have').value.toLowerCase().split(/[,\n]/).map(s => s.trim()).filter(s => s.length >= 2);
+  const basics = $('#basics').checked, out = $('#cook-out');
+  if (!have.length) { out.innerHTML = `<p class="muted">Type a few ingredients to see what you can make.</p>`; return; }
+  const res = recipes.filter(r => r.ingredients?.length).map(r => {
+    const missing = []; let got = 0;
+    for (const line of r.ingredients) {
+      const l = line.toLowerCase();
+      if (have.some(h => l.includes(h)) || (basics && STAPLES.some(s => new RegExp('\\b' + s + '\\b').test(l)))) got++;
+      else missing.push(line);
+    }
+    return { r, got, total: r.ingredients.length, missing };
+  }).filter(x => x.got > 0).sort((a, b) => (b.got / b.total) - (a.got / a.total) || b.got - a.got);
+  if (!res.length) { out.innerHTML = `<p class="muted">No saved recipes use those yet.</p>`; return; }
+  out.innerHTML = res.slice(0, 30).map(x => `
+    <button class="match" data-id="${x.r.id}">
+      <h3>${esc(x.r.title)}</h3>
+      <div class="bar-meter"><i style="width:${Math.round(x.got / x.total * 100)}%"></i></div>
+      <p class="muted" style="margin:0;font-size:14px">You have ${x.got} of ${x.total}${x.missing.length ? ' — need: ' + esc(x.missing.slice(0, 4).join(', ')) + (x.missing.length > 4 ? '…' : '') : ' — ready to cook!'}</p>
+    </button>`).join('');
+}
+let cookTimer;
+$('#have').addEventListener('input', () => { clearTimeout(cookTimer); cookTimer = setTimeout(renderCook, 250); });
+$('#basics').onchange = renderCook;
+$('#cook-out').addEventListener('click', e => { const b = e.target.closest('.match'); if (b) openDetail(b.dataset.id); });
+
+/* ---------- Backup ---------- */
+async function renderUsage() {
+  if (!navigator.storage?.estimate) return;
+  const { usage, quota } = await navigator.storage.estimate();
+  $('#b-usage').textContent = `Using ${mb(usage || 0)} of about ${mb(quota || 0)} available.`;
+}
+$('#b-export').onclick = async () => {
+  const data = JSON.stringify({ app: 'recipe-box', version: 1, exported: new Date().toISOString(), recipes });
+  const name = `recipes-${new Date().toISOString().slice(0, 10)}.json`;
+  const file = new File([data], name, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Recipe backup' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+};
+$('#b-import').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const list = Array.isArray(data) ? data : data.recipes;
+    if (!Array.isArray(list)) throw new Error();
+    let n = 0;
+    for (const r of list) {
+      if (!r || !r.id || !r.title) continue;
+      const existing = recipes.find(x => x.id === r.id);
+      r.videos = existing ? existing.videos : (r.videos || []);
+      await putRecipe(r); n++;
+    }
+    recipes = await getAllRecipes();
+    toast(`Imported ${n} recipes`);
+  } catch (err) { toast('That file isn’t a recipe backup'); }
+  e.target.value = '';
+};
+
+/* ---------- Wiring ---------- */
+$('#q').addEventListener('input', e => { filter.q = e.target.value; renderList(); });
+$('#sort').onchange = e => { filter.sort = e.target.value; renderList(); };
+$('#chips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (c) { filter.cat = c.dataset.cat; renderList(); } });
+$('#list').addEventListener('click', e => { const c = e.target.closest('.card'); if (c) openDetail(c.dataset.id); });
+$('#fab').onclick = () => openEdit(null);
+$('#d-back').onclick = () => show('list');
+$('#d-edit').onclick = () => openEdit(current);
+document.querySelectorAll('.tabbar button').forEach(b => b.onclick = () => show(b.dataset.tab));
+
+(async () => {
+  try { db = await openDB(); recipes = await getAllRecipes(); }
+  catch (e) { toast('Storage unavailable — try opening from the home screen'); }
+  renderList();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
