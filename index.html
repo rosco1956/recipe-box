@@ -137,7 +137,7 @@ textarea.in{min-height:110px;resize:vertical}
       <div class="field">
         <label>Recipe shown on screen?</label>
         <label class="btn wide" id="f-scan-btn">📸 Scan text from screenshots<input class="sr" type="file" accept="image/*" multiple id="f-scan"></label>
-        <small id="f-scan-status">Screenshot the post or pause the video on the recipe, then pick the screenshots here. Several at once is fine.</small>
+        <small id="f-scan-status">Screenshot the post or pause the video on the recipe, then pick the screenshots here. Several at once is fine. <i>(v3)</i></small>
       </div>
       <div class="field" style="margin:0">
         <label for="f-caption">Paste the post caption (optional)</label>
@@ -200,6 +200,7 @@ textarea.in{min-height:110px;resize:vertical}
     <button class="btn primary wide" id="b-export">⬆︎ Export backup</button>
     <label class="btn wide">⬇︎ Import a backup<input class="sr" type="file" accept=".json,application/json" id="b-import"></label>
     <p class="muted" id="b-usage" style="font-size:14px;margin-top:18px"></p>
+    <p class="muted" style="font-size:13px">App version 3</p>
   </div>
 </section>
 
@@ -508,6 +509,106 @@ $('#f-parse').onclick = () => {
   if (p.steps.length) $('#f-steps').value = p.steps.join('\n');
   if (!$('#f-notes').value) $('#f-notes').value = t;
   toast(p.ing.length || p.steps.length ? `Found ${p.ing.length} ingredients, ${p.steps.length} steps — check them over` : 'Couldn’t spot sections; caption saved in Notes');
+};
+
+/* Scan text from screenshots (OCR runs on the phone using Tesseract.js) */
+let ocrLib;
+function loadOCR() {
+  if (window.Tesseract) return Promise.resolve();
+  if (!ocrLib) ocrLib = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload = res; s.onerror = () => { ocrLib = null; rej(new Error('offline')); };
+    document.head.appendChild(s);
+  });
+  return ocrLib;
+}
+// Shrink/enlarge to a sensible size and boost contrast, done pixel-by-pixel so it works in Safari
+function prepImage(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), u = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const s = Math.min(2, 1800 / Math.max(img.width, img.height)) || 1;
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+        let sum = 0;
+        for (let i = 0; i < px.length; i += 4) sum += px[i] * .3 + px[i + 1] * .59 + px[i + 2] * .11;
+        const dark = sum / (px.length / 4) < 128; // light text on dark background: flip it
+        for (let i = 0; i < px.length; i += 4) {
+          let v = px[i] * .3 + px[i + 1] * .59 + px[i + 2] * .11;
+          if (dark) v = 255 - v;
+          v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
+          px[i] = px[i + 1] = px[i + 2] = v;
+        }
+        g.putImageData(d, 0, 0);
+        URL.revokeObjectURL(u);
+        c.toBlob(b => b ? res(b) : rej(new Error('Could not prepare the image')), 'image/png');
+      } catch (err) { URL.revokeObjectURL(u); rej(err); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Could not open that image')); };
+    img.src = u;
+  });
+}
+const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
+
+$('#f-scan').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  const status = $('#f-scan-status'), btn = $('#f-scan-btn');
+  btn.style.opacity = .5; btn.style.pointerEvents = 'none';
+  let worker, step = 'loading';
+  try {
+    status.textContent = 'Loading the text reader (first time can take 10–20 seconds)…';
+    await withTimeout(loadOCR(), 30000, 'The text reader took too long to download. Check your signal and try again.');
+    step = 'starting';
+    worker = await withTimeout(Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') status.textContent = `Reading screenshot… ${Math.round(m.progress * 100)}%`;
+        else if (m.status && step === 'starting') status.textContent = `Getting ready: ${m.status}…`;
+      }
+    }), 60000, 'The text reader couldn’t start. Close the app fully and try again.');
+    const texts = [];
+    for (let i = 0; i < files.length; i++) {
+      step = 'reading';
+      status.textContent = `Reading screenshot ${i + 1} of ${files.length}…`;
+      const blob = await prepImage(files[i]);
+      const { data } = await withTimeout(worker.recognize(blob), 90000, 'Reading that screenshot took too long. Try cropping it to just the recipe.');
+      const clean = toLines(data.text).filter(l => /[a-z]{2,}/i.test(l) && l.length > 2).join('\n');
+      if (clean) texts.push(clean);
+    }
+    const text = texts.join('\n');
+    if (!text) { status.textContent = 'Couldn’t find any text in those screenshots. Try cropping to just the recipe.'; return; }
+
+    const cap = $('#f-caption');
+    cap.value = (cap.value ? cap.value + '\n' : '') + text;
+
+    let p = { ing: [], steps: [], title: '' };
+    try { p = parseCaption(text); } catch (err) {}
+    let ing = p.ing, steps = p.steps;
+    if (!ing.length && !steps.length) ing = toLines(text); // no headings found: treat it all as ingredients
+    const addTo = (sel, lines) => {
+      if (!lines.length) return;
+      const box = $(sel), cur = box.value.trim();
+      box.value = (cur ? cur + '\n' : '') + lines.join('\n');
+    };
+    addTo('#f-ing', ing);
+    addTo('#f-steps', steps);
+    if (p.title && !ing.includes(p.title) && !$('#f-title').value) $('#f-title').value = p.title;
+    status.textContent = `✅ Added ${ing.length} ingredient line${ing.length === 1 ? '' : 's'}${steps.length ? ` and ${steps.length} step${steps.length === 1 ? '' : 's'}` : ''}. Check them over; scanned text can have typos.`;
+    toast('Text added to Ingredients');
+    $('#f-ing').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (err) {
+    status.textContent = '⚠️ ' + (err && err.message === 'offline'
+      ? 'The text reader needs an internet connection. Try again with signal.'
+      : `Couldn’t read it (${step}): ${(err && (err.message || err)) || 'unknown error'}`);
+  } finally {
+    if (worker) worker.terminate().catch(() => {});
+    btn.style.opacity = ''; btn.style.pointerEvents = '';
+  }
 };
 
 async function saveDraft() {
