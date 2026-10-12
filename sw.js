@@ -1,5 +1,5 @@
 // Lets Recipe Box open without signal. Always tries the network first so updates come through.
-const CACHE = 'recipe-box-v3';
+const CACHE = 'recipe-box-v4';
 const FILES = ['./', './index.html', './icon.png', './manifest.json'];
 
 self.addEventListener('install', e => {

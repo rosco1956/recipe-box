@@ -84,6 +84,15 @@ textarea.in{min-height:110px;resize:vertical}
 .toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2a211b;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;max-width:90vw;text-align:center}
 .toast.on{opacity:1}
 .hide-tabs .tabbar,.hide-tabs .fab{display:none}
+.crop{position:fixed;inset:0;z-index:20;background:#000;display:none;flex-direction:column;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 12px)}
+.crop.on{display:flex}
+.crop p{color:#fff;margin:0 0 10px;font-size:15px;text-align:center}
+.crop-stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none}
+.crop-wrap{position:relative;max-width:100%;max-height:100%}
+.crop-wrap img{display:block;max-width:100%;max-height:calc(100vh - 190px);-webkit-user-drag:none;pointer-events:none}
+.crop-box{position:absolute;border:3px solid #ffcc00;box-shadow:0 0 0 9999px rgba(0,0,0,.55);border-radius:4px;pointer-events:none}
+.crop-btns{display:flex;gap:10px;margin-top:12px}
+.crop-btns .btn{flex:1}
 </style>
 </head>
 <body>
@@ -137,7 +146,7 @@ textarea.in{min-height:110px;resize:vertical}
       <div class="field">
         <label>Recipe shown on screen?</label>
         <label class="btn wide" id="f-scan-btn">📸 Scan text from screenshots<input class="sr" type="file" accept="image/*" multiple id="f-scan"></label>
-        <small id="f-scan-status">Screenshot the post or pause the video on the recipe, then pick the screenshots here. Several at once is fine. <i>(v3)</i></small>
+        <small id="f-scan-status">Screenshot the post or pause the video on the recipe, then pick the screenshots here. You’ll then drag a box around just the recipe text. <i>(v4)</i></small>
       </div>
       <div class="field" style="margin:0">
         <label for="f-caption">Paste the post caption (optional)</label>
@@ -200,7 +209,7 @@ textarea.in{min-height:110px;resize:vertical}
     <button class="btn primary wide" id="b-export">⬆︎ Export backup</button>
     <label class="btn wide">⬇︎ Import a backup<input class="sr" type="file" accept=".json,application/json" id="b-import"></label>
     <p class="muted" id="b-usage" style="font-size:14px;margin-top:18px"></p>
-    <p class="muted" style="font-size:13px">App version 3</p>
+    <p class="muted" style="font-size:13px">App version 4</p>
   </div>
 </section>
 
@@ -211,6 +220,14 @@ textarea.in{min-height:110px;resize:vertical}
   <button data-tab="backup"><span>💾</span>Backup</button>
 </nav>
 <div class="toast" id="toast"></div>
+<div class="crop" id="crop">
+  <p id="crop-msg">Drag your finger across the recipe text</p>
+  <div class="crop-stage" id="crop-stage"><div class="crop-wrap" id="crop-wrap"><img id="crop-img" alt=""><div class="crop-box" id="crop-box"></div></div></div>
+  <div class="crop-btns">
+    <button class="btn" id="crop-cancel" type="button">Cancel</button>
+    <button class="btn primary" id="crop-ok" type="button">Scan this area</button>
+  </div>
+</div>
 
 <script>
 /* ---------- Database (IndexedDB, stays on the phone) ---------- */
@@ -523,35 +540,84 @@ function loadOCR() {
   });
   return ocrLib;
 }
-// Shrink/enlarge to a sensible size and boost contrast, done pixel-by-pixel so it works in Safari
-function prepImage(file) {
+/* Crop sheet: user drags a box around the recipe text. Resolves to {x,y,w,h} as fractions, or null if cancelled */
+function askCrop(file, label) {
+  return new Promise(resolve => {
+    const sheet = $('#crop'), img = $('#crop-img'), box = $('#crop-box'), stage = $('#crop-stage');
+    const url = URL.createObjectURL(file);
+    let r = { x: 0.02, y: 0.06, w: 0.96, h: 0.86 }, start = null;
+    const draw = () => Object.assign(box.style, { left: r.x * 100 + '%', top: r.y * 100 + '%', width: r.w * 100 + '%', height: r.h * 100 + '%' });
+    const pt = e => {
+      const b = img.getBoundingClientRect();
+      return { x: Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), y: Math.min(1, Math.max(0, (e.clientY - b.top) / b.height)) };
+    };
+    stage.onpointerdown = e => { e.preventDefault(); stage.setPointerCapture(e.pointerId); start = pt(e); r = { x: start.x, y: start.y, w: 0, h: 0 }; draw(); };
+    stage.onpointermove = e => {
+      if (!start) return; const p = pt(e);
+      r = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) }; draw();
+    };
+    stage.onpointerup = stage.onpointercancel = () => { start = null; };
+    const done = val => { sheet.classList.remove('on'); URL.revokeObjectURL(url); img.removeAttribute('src'); resolve(val); };
+    $('#crop-ok').onclick = () => done(r.w > 0.03 && r.h > 0.02 ? r : { x: 0, y: 0, w: 1, h: 1 });
+    $('#crop-cancel').onclick = () => done(null);
+    $('#crop-msg').textContent = label;
+    img.onload = draw; img.src = url;
+    sheet.classList.add('on');
+  });
+}
+
+/* Cut out the chosen area, size it for reading, and make black-text and white-text versions */
+function prepImage(file, crop) {
   return new Promise((res, rej) => {
     const img = new Image(), u = URL.createObjectURL(file);
     img.onload = () => {
       try {
-        const s = Math.min(2, 1800 / Math.max(img.width, img.height)) || 1;
+        const sx = crop.x * img.width, sy = crop.y * img.height, sw = crop.w * img.width, sh = crop.h * img.height;
+        const s = Math.min(3, 1600 / Math.max(sw, sh));
         const c = document.createElement('canvas');
-        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.width = Math.max(1, Math.round(sw * s)); c.height = Math.max(1, Math.round(sh * s));
         const g = c.getContext('2d');
-        g.drawImage(img, 0, 0, c.width, c.height);
-        const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
-        let sum = 0;
-        for (let i = 0; i < px.length; i += 4) sum += px[i] * .3 + px[i + 1] * .59 + px[i + 2] * .11;
-        const dark = sum / (px.length / 4) < 128; // light text on dark background: flip it
-        for (let i = 0; i < px.length; i += 4) {
-          let v = px[i] * .3 + px[i + 1] * .59 + px[i + 2] * .11;
-          if (dark) v = 255 - v;
-          v = Math.max(0, Math.min(255, (v - 128) * 1.5 + 128));
-          px[i] = px[i + 1] = px[i + 2] = v;
-        }
-        g.putImageData(d, 0, 0);
+        g.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
         URL.revokeObjectURL(u);
-        c.toBlob(b => b ? res(b) : rej(new Error('Could not prepare the image')), 'image/png');
+        const base = g.getImageData(0, 0, c.width, c.height);
+        // mode 'normal' = dark text on light, 'invert' = light text on dark, 'white' / 'yellow' = keep only caption-coloured pixels
+        const make = mode => new Promise((ok, bad) => {
+          const d = new ImageData(new Uint8ClampedArray(base.data), base.width, base.height), px = d.data;
+          for (let i = 0; i < px.length; i += 4) {
+            const r = px[i], gg = px[i + 1], bl = px[i + 2];
+            let v;
+            if (mode === 'white') v = Math.min(r, gg, bl) > 190 ? 0 : 255;
+            else if (mode === 'yellow') v = (r > 190 && gg > 160 && bl < 120) ? 0 : 255;
+            else {
+              v = r * .3 + gg * .59 + bl * .11;
+              if (mode === 'invert') v = 255 - v;
+              v = Math.max(0, Math.min(255, (v - 128) * 1.6 + 128));
+            }
+            px[i] = px[i + 1] = px[i + 2] = v;
+          }
+          g.putImageData(d, 0, 0);
+          c.toBlob(b => b ? ok(b) : bad(new Error('Could not prepare the image')), 'image/png');
+        });
+        (async () => { const out = []; for (const m of ['normal', 'invert', 'white', 'yellow']) out.push(await make(m)); return out; })().then(res, rej);
       } catch (err) { URL.revokeObjectURL(u); rej(err); }
     };
     img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Could not open that image')); };
     img.src = u;
   });
+}
+
+/* Keep only words the reader is reasonably sure of, and drop lines that are just noise */
+function cleanOCR(data) {
+  const out = [];
+  for (const line of (data.lines || [])) {
+    const words = (line.words || []).filter(w => w.confidence >= 20 && /[a-z0-9½¼¾]/i.test(w.text)).map(w => w.text);
+    let t = words.join(' ').replace(/[|\\_~`©®¢§»«]+/g, '').replace(/\s{2,}/g, ' ').replace(/[-–—.,:;'"]+$/, '').trim();
+    if (t.length < 3 || !/[a-z]{3,}/i.test(t)) continue;
+    if (/^\d{1,2}:\d{2}/.test(t)) continue;                         // clock / video timer
+    out.push(t);
+  }
+  if (!out.length && !data.lines) return toLines(data.text).filter(l => /[a-z]{3,}/i.test(l));
+  return out;
 }
 const withTimeout = (p, ms, msg) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms))]);
 
@@ -559,29 +625,42 @@ $('#f-scan').onchange = async e => {
   const files = [...e.target.files]; e.target.value = '';
   if (!files.length) return;
   const status = $('#f-scan-status'), btn = $('#f-scan-btn');
+
+  // 1. Ask for the crop on each screenshot first (so the reader can download meanwhile)
+  const crops = [];
+  const ready = loadOCR().catch(err => err);
+  for (let i = 0; i < files.length; i++) {
+    const c = await askCrop(files[i], files.length > 1 ? `Screenshot ${i + 1} of ${files.length}: drag across the recipe text` : 'Drag your finger across the recipe text');
+    if (!c) { status.textContent = 'Scan cancelled.'; return; }
+    crops.push(c);
+  }
+
   btn.style.opacity = .5; btn.style.pointerEvents = 'none';
   let worker, step = 'loading';
   try {
     status.textContent = 'Loading the text reader (first time can take 10–20 seconds)…';
-    await withTimeout(loadOCR(), 30000, 'The text reader took too long to download. Check your signal and try again.');
+    const loaded = await withTimeout(ready, 30000, 'The text reader took too long to download. Check your signal and try again.');
+    if (loaded instanceof Error) throw loaded;
     step = 'starting';
     worker = await withTimeout(Tesseract.createWorker('eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') status.textContent = `Reading screenshot… ${Math.round(m.progress * 100)}%`;
-        else if (m.status && step === 'starting') status.textContent = `Getting ready: ${m.status}…`;
-      }
+      logger: m => { if (m.status === 'recognizing text') status.textContent = `Reading… ${Math.round(m.progress * 100)}%`; }
     }), 60000, 'The text reader couldn’t start. Close the app fully and try again.');
-    const texts = [];
+    await worker.setParameters({ tessedit_pageseg_mode: '6' }); // treat the area as a block of text
+    const all = [];
     for (let i = 0; i < files.length; i++) {
       step = 'reading';
       status.textContent = `Reading screenshot ${i + 1} of ${files.length}…`;
-      const blob = await prepImage(files[i]);
-      const { data } = await withTimeout(worker.recognize(blob), 90000, 'Reading that screenshot took too long. Try cropping it to just the recipe.');
-      const clean = toLines(data.text).filter(l => /[a-z]{2,}/i.test(l) && l.length > 2).join('\n');
-      if (clean) texts.push(clean);
+      const versions = await prepImage(files[i], crops[i]);
+      let best = null;
+      for (const v of versions) {   // try dark-on-light and light-on-dark, keep whichever reads better
+        const { data } = await withTimeout(worker.recognize(v), 90000, 'Reading that screenshot took too long. Try a smaller box.');
+        const score = (data.words || []).filter(w => w.confidence >= 60 && /[a-z]{2,}/i.test(w.text)).reduce((t, w) => t + w.confidence * w.text.length, 0);
+        if (!best || score > best.score) best = { data, score };
+      }
+      all.push(...cleanOCR(best.data));
     }
-    const text = texts.join('\n');
-    if (!text) { status.textContent = 'Couldn’t find any text in those screenshots. Try cropping to just the recipe.'; return; }
+    if (!all.length) { status.textContent = 'Couldn’t read any clear text there. Try a tighter box around just the words.'; return; }
+    const text = all.join('\n');
 
     const cap = $('#f-caption');
     cap.value = (cap.value ? cap.value + '\n' : '') + text;
@@ -589,7 +668,7 @@ $('#f-scan').onchange = async e => {
     let p = { ing: [], steps: [], title: '' };
     try { p = parseCaption(text); } catch (err) {}
     let ing = p.ing, steps = p.steps;
-    if (!ing.length && !steps.length) ing = toLines(text); // no headings found: treat it all as ingredients
+    if (!ing.length && !steps.length) ing = all; // no headings found: treat it all as ingredients
     const addTo = (sel, lines) => {
       if (!lines.length) return;
       const box = $(sel), cur = box.value.trim();
